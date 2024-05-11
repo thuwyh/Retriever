@@ -100,8 +100,11 @@ class Retriever(HTTPMethodView):
                  text_query:str=None, 
                  top_n:int=5,
                  with_payload=False):
-        loop = asyncio.get_event_loop()
-        ret = loop.run_until_complete(self.aretrieve(text_query, top_n, with_payload))
+        try:
+            loop = asyncio.get_event_loop()
+            ret = loop.run_until_complete(self.aretrieve(text_query, top_n, with_payload))
+        except:
+            ret = asyncio.run(self.aretrieve(text_query, top_n, with_payload))
         return ret
     
     async def get(self, request):
