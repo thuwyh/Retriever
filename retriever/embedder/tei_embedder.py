@@ -22,7 +22,7 @@ class TEIEmbedder(BaseEmbedder):
         self.normalize = normalize
 
         if cache_name is not None:
-            cachedir = user_cache_dir("GPTClient", "thuwyh")
+            cachedir = user_cache_dir("Retriever.TEIEmbedder", "thuwyh")
             cache_root = Path(cachedir) / cache_name
             self.cache = Cache(str(cache_root))
         else:
