@@ -15,10 +15,10 @@ coloredlogs.install(level=logging.INFO, logger=logger)
 
 
 async def aprepare_doc(
-    text: str, embedder: BaseEmbedder, tokenizer: Tokenizer, sem: asyncio.Semaphore
+    text: str, embedder: BaseEmbedder, tokenizer: Tokenizer, sem: asyncio.Semaphore, meta:object=None
 ) -> Document:
     tokens = tokenizer.tokenize(text)
-    doc = Document(tokens=tokens, payload=text)
+    doc = Document(tokens=tokens, payload=text, meta=meta)
     if embedder is not None:
         async with sem:
             embedding = await embedder.aget_embedding(text)
@@ -28,6 +28,7 @@ async def aprepare_doc(
 
 def process_batch(
     texts: List[str],
+    metas: List[object],
     embedder: BaseEmbedder = None,
     tokenizer: Tokenizer = SPACE_TOKENIZER,
     parallel: int = 5,
@@ -35,10 +36,10 @@ def process_batch(
     async def _process():
         sem = asyncio.Semaphore(parallel)
         tasks = []
-        for t in texts:
+        for t, m in zip(texts, metas):
             tasks.append(
                 asyncio.create_task(
-                    aprepare_doc(t, embedder, tokenizer, sem)
+                    aprepare_doc(t, embedder, tokenizer, sem, meta=m)
                 )
             )
         results = await asyncio.gather(*tasks)

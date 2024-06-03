@@ -49,7 +49,8 @@ class Retriever(HTTPMethodView):
     async def aretrieve(self,
                         text_query:str=None, 
                         top_n:int=5,
-                        with_payload=False):
+                        with_payload=False,
+                        with_meta=False):
         n = min(len(self.documents), top_n)
         tokenized_query = self.tokenizer.tokenize(text_query)
         doc_scores = self.bm25_index.get_scores(tokenized_query)
@@ -72,6 +73,8 @@ class Retriever(HTTPMethodView):
             picked_ind.add(ind)
             if with_payload:
                 to_append['payload'] = self.documents[ind].payload
+            if with_meta:
+                to_append['meta'] = self.documents[ind].meta
             ret.append(to_append)
         for ind in top_n_index:
             if ind in picked_ind:
@@ -86,6 +89,8 @@ class Retriever(HTTPMethodView):
             picked_ind.add(ind)
             if with_payload:
                 to_append['payload'] = self.documents[ind].payload
+            if with_meta:
+                to_append['meta'] = self.documents[ind].meta
             ret.append(to_append)
         if self.reranker is not None:
             # do rerank
@@ -99,12 +104,13 @@ class Retriever(HTTPMethodView):
     def retrieve(self, 
                  text_query:str=None, 
                  top_n:int=5,
-                 with_payload=False):
+                 with_payload=False,
+                 with_meta=False):
         try:
             loop = asyncio.get_event_loop()
-            ret = loop.run_until_complete(self.aretrieve(text_query, top_n, with_payload))
+            ret = loop.run_until_complete(self.aretrieve(text_query, top_n, with_payload, with_meta))
         except:
-            ret = asyncio.run(self.aretrieve(text_query, top_n, with_payload))
+            ret = asyncio.run(self.aretrieve(text_query, top_n, with_payload, with_meta))
         return ret
     
     async def get(self, request):

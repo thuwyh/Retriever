@@ -20,4 +20,5 @@ class Document(BaseModel):
     vector_alias: Optional[List[List[float]]]=None
     tokens: Optional[List[str]]
     payload: object
+    meta: Optional[object]
     
