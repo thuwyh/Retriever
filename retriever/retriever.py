@@ -55,9 +55,9 @@ class Retriever(HTTPMethodView):
 
             self.logger.info("Building auxiliary HNSW index...")
             self.aux_ann = hnswlib.Index(space = 'cosine', dim = embedder.dim)
-            self.aux_ann.init_index(max_elements = len(documents), ef_construction = 200, M = 16)
-            ids = np.arange(len(documents))
-            self.aux_ann.add_items(np.array([d.vector for d in documents], dtype=np.float32), ids)
+            self.aux_ann.init_index(max_elements = len(aug_docs), ef_construction = 200, M = 16)
+            ids = np.arange(len(aug_docs))
+            self.aux_ann.add_items(np.array([d.vector for d in aug_docs], dtype=np.float32), ids)
             self.aux_ann.set_ef(50)
             self.logger.info(f"Auxiliary HNSW index built in {perf_counter()-start:.3f}s.")
             self.aug_docs = aug_docs
@@ -68,6 +68,8 @@ class Retriever(HTTPMethodView):
 
         self.reranker = reranker
         self.documents = documents
+        self.corpus = {d.id:d for d in self.documents}
+
 
     async def aretrieve(self,
                         text_query:str=None, 
@@ -83,7 +85,6 @@ class Retriever(HTTPMethodView):
         query_vector = np.float32(np.array([query_vector]))
         labels, distances = self.ann.knn_query(query_vector, k = top_n)
         
-        ret = []
         result = RetrievedResult()
         for rank, ind in enumerate(labels[0]):
             result.append(RetrievedItem(
@@ -108,14 +109,14 @@ class Retriever(HTTPMethodView):
             aux_labels, aux_distances = self.aux_ann.knn_query(query_vector, k = top_n)
             for rank, ind in enumerate(aux_labels[0]):
                 result.append(RetrievedItem(
-                    doc=self.documents[ind],
+                    doc=self.aug_docs[ind],
                     source=Source.AUX_ANN,
                     cosine_score=float(aux_distances[0][rank]),
                     bm25_score=aux_doc_scores[ind]
                 ))
             for ind in aux_top_n_index:
                 result.append(RetrievedItem(
-                    doc=self.documents[ind],
+                    doc=self.aug_docs[ind],
                     source=Source.AUX_BM25,
                     cosine_score=-1,
                     bm25_score=aux_doc_scores[ind]
@@ -124,7 +125,11 @@ class Retriever(HTTPMethodView):
         if self.reranker is not None:
             # do rerank
             await result.rerank(text_query, self.reranker)
-        return ret
+
+        return result.to_json(self.corpus, 
+                              top_n=top_n,
+                              with_payload=with_payload,
+                              with_meta=with_meta)
 
     def retrieve(self, 
                  text_query:str=None, 

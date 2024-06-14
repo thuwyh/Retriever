@@ -3,11 +3,12 @@ import logging
 from pathlib import Path
 from time import perf_counter
 from typing import List
-from cachetools import Cache
+from diskcache import Cache
 import openai
 import coloredlogs
 from platformdirs import user_cache_dir
 import json
+from tqdm import tqdm
 
 from retriever.augmenter.base_augmenter import BaseAugmenter
 from retriever.types import Document
@@ -51,7 +52,8 @@ class OpenAID2QAugmenter(BaseAugmenter):
         self.cache = Cache(str(cache_root))
 
     async def augment_single_article(
-        self, doc: Document, tokenizer: Tokenizer, sem, embedder: BaseEmbedder = None
+        self, doc: Document, tokenizer: Tokenizer, sem, embedder: BaseEmbedder = None,
+        pbar:tqdm=None
     ) -> List[Document]:
         if doc.payload in self.cache:
             queries = self.cache[doc.payload]
@@ -72,14 +74,17 @@ class OpenAID2QAugmenter(BaseAugmenter):
             except:
                 queries = []
         ret = []
+        logger.info(f"{doc.payload[:20]}, {queries}")
         for q in queries:
             tokens = tokenizer.tokenize(q)
-            doc = Document(tokens=tokens, payload=q, meta={"original_docid": doc.id})
+            new_doc = Document(tokens=tokens, payload=q, meta={"original_docid": doc.id})
             if embedder is not None:
                 async with sem:
                     embedding = await embedder.aget_embedding(q)
-            doc.vector = embedding
-            ret.append(doc)
+            new_doc.vector = embedding
+            ret.append(new_doc)
+        if pbar is not None:
+            pbar.update(1)
         return ret
 
     def augment(
@@ -92,22 +97,23 @@ class OpenAID2QAugmenter(BaseAugmenter):
         async def _process():
             sem = asyncio.Semaphore(parallel)
             tasks = []
+            pbar = tqdm(total=len(documents), desc="augmentation")
             for d in documents:
                 tasks.append(
                     asyncio.create_task(
                         self.augment_single_article(
-                            d, tokenizer, sem, embedder=embedder
+                            d, tokenizer, sem, embedder=embedder, pbar=pbar
                         )
                     )
                 )
             results = await asyncio.gather(*tasks)
-            return results
+            return sum(results, [])
 
         start = perf_counter()
         logger.info(f"Augmenting starts. Total tasks: {len(documents)}")
         loop = asyncio.get_event_loop()
         results = loop.run_until_complete(_process())
-        logger.info(f"all tasks finished in {perf_counter()-start:.3f}s")
+        logger.info(f"{len(results)} aug docs generated. all tasks finished in {perf_counter()-start:.3f}s")
         return results
 
 
