@@ -9,7 +9,8 @@ from sanic.response import json as json_response
 from sanic.views import HTTPMethodView
 from sanic.worker.loader import AppLoader
 
-from retriever.document import Document
+from retriever.augmenter.base_augmenter import BaseAugmenter
+from retriever.types import Document, RetrievedItem, RetrievedResult, Source
 from retriever.tokenizer import Tokenizer
 from retriever.embedder import BaseEmbedder
 from retriever.reranker import BaseReranker
@@ -23,6 +24,7 @@ class Retriever(HTTPMethodView):
                  embedder: BaseEmbedder,
                  tokenizer:Tokenizer,
                  reranker: BaseReranker=None,
+                 augmenter: BaseAugmenter = None,
                  log_level:int=logging.INFO) -> None:
         self.logger = logging.getLogger("Retriever")
         self.logger.setLevel(log_level)
@@ -43,6 +45,27 @@ class Retriever(HTTPMethodView):
         self.ann.set_ef(50)
         self.logger.info(f"HNSW index built in {perf_counter()-start:.3f}s.")
 
+        # build auxiliary index if needed
+        if augmenter is not None:
+            aug_docs = augmenter.augment(documents, tokenizer, embedder)
+
+            self.logger.info("Building auxiliary BM25 index...")
+            self.aux_bm25_index = BM25Okapi([x.tokens for x in aug_docs])
+            self.logger.info(f"Auxiliary BM25 index built in {perf_counter()-start:.3f}s.")
+
+            self.logger.info("Building auxiliary HNSW index...")
+            self.aux_ann = hnswlib.Index(space = 'cosine', dim = embedder.dim)
+            self.aux_ann.init_index(max_elements = len(documents), ef_construction = 200, M = 16)
+            ids = np.arange(len(documents))
+            self.aux_ann.add_items(np.array([d.vector for d in documents], dtype=np.float32), ids)
+            self.aux_ann.set_ef(50)
+            self.logger.info(f"Auxiliary HNSW index built in {perf_counter()-start:.3f}s.")
+            self.aug_docs = aug_docs
+        else:
+            self.aux_bm25_index = None
+            self.aux_ann = None
+            self.aug_docs = None
+
         self.reranker = reranker
         self.documents = documents
 
@@ -61,44 +84,46 @@ class Retriever(HTTPMethodView):
         labels, distances = self.ann.knn_query(query_vector, k = top_n)
         
         ret = []
-        picked_ind = set()
+        result = RetrievedResult()
         for rank, ind in enumerate(labels[0]):
-            to_append = {
-                'id': self.documents[ind].id,
-                'index': int(ind),
-                'cosine_score': float(distances[0][rank]),
-                'bm25_score': doc_scores[ind],
-                'source': 'ann'
-            }
-            picked_ind.add(ind)
-            if with_payload:
-                to_append['payload'] = self.documents[ind].payload
-            if with_meta:
-                to_append['meta'] = self.documents[ind].meta
-            ret.append(to_append)
+            result.append(RetrievedItem(
+                doc=self.documents[ind],
+                source=Source.ANN,
+                cosine_score=float(distances[0][rank]),
+                bm25_score=doc_scores[ind]
+            ))
         for ind in top_n_index:
-            if ind in picked_ind:
-                continue
-            to_append = {
-                'id': self.documents[ind].id,
-                'index': int(ind),
-                'cosine_score': -1,
-                'bm25_score': doc_scores[ind],
-                'source': 'bm25'
-            }
-            picked_ind.add(ind)
-            if with_payload:
-                to_append['payload'] = self.documents[ind].payload
-            if with_meta:
-                to_append['meta'] = self.documents[ind].meta
-            ret.append(to_append)
+            result.append(RetrievedItem(
+                doc=self.documents[ind],
+                source=Source.BM25,
+                cosine_score=-1,
+                bm25_score=doc_scores[ind]
+            ))
+
+        # aux retrieve
+        if self.aug_docs is not None:
+            aux_doc_scores = self.aux_bm25_index.get_scores(tokenized_query)
+            aux_top_n_index = aux_doc_scores.argsort()[-n:][::-1]
+
+            aux_labels, aux_distances = self.aux_ann.knn_query(query_vector, k = top_n)
+            for rank, ind in enumerate(aux_labels[0]):
+                result.append(RetrievedItem(
+                    doc=self.documents[ind],
+                    source=Source.AUX_ANN,
+                    cosine_score=float(aux_distances[0][rank]),
+                    bm25_score=aux_doc_scores[ind]
+                ))
+            for ind in aux_top_n_index:
+                result.append(RetrievedItem(
+                    doc=self.documents[ind],
+                    source=Source.AUX_BM25,
+                    cosine_score=-1,
+                    bm25_score=aux_doc_scores[ind]
+                ))
+
         if self.reranker is not None:
             # do rerank
-            texts = [self.documents[x['index']].payload for x in ret]
-            rerank_results = sorted(await self.reranker.arerank(text_query, texts), key=lambda x: x.score, reverse=True)
-            ret = [ret[x.index] for x in rerank_results[:top_n]]
-            for r, rerank_r in zip(ret, rerank_results):
-                r['rerank_score'] = rerank_r.score
+            await result.rerank(text_query, self.reranker)
         return ret
 
     def retrieve(self, 

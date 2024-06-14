@@ -1,9 +1,10 @@
 from typing import List
+from retriever.augmenter.base_augmenter import BaseAugmenter
 from retriever.retriever import Retriever
 from retriever.tokenizer import Tokenizer, SPACE_TOKENIZER
 from retriever.embedder import BaseEmbedder
 from retriever.reranker import BaseReranker
-from retriever.document import Document
+from retriever.types import Document
 from retriever.doc_processor import process_batch
 
 class RetrieverFactory:
@@ -14,7 +15,8 @@ class RetrieverFactory:
         metas: List[object]=None,
         embedder:BaseEmbedder=None,
         tokenizer:Tokenizer=SPACE_TOKENIZER,
-        reranker:BaseReranker=None
+        reranker:BaseReranker=None,
+        augmenter: BaseAugmenter = None,
     ) -> Retriever:
         if metas is None:
             documents = process_batch(texts, [None]*len(texts), embedder, tokenizer)
@@ -25,5 +27,6 @@ class RetrieverFactory:
             documents=documents,
             embedder=embedder,
             tokenizer=tokenizer,
-            reranker=reranker
+            reranker=reranker,
+            augmenter=augmenter
         )

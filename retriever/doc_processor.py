@@ -3,10 +3,11 @@ from time import perf_counter
 import logging
 import asyncio
 import coloredlogs
+from retriever.augmenter.base_augmenter import BaseAugmenter
 from retriever.retriever import Retriever
 from retriever.tokenizer import Tokenizer, SPACE_TOKENIZER
 from retriever.embedder import BaseEmbedder
-from retriever.document import Document
+from retriever.types import Document
 
 
 logger = logging.getLogger("DocProcessor")

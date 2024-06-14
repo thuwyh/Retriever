@@ -1,5 +1,7 @@
 import asyncio
+from pathlib import Path
 import openai
+from platformdirs import user_cache_dir
 
 DEFAULT_TEMPLATE = """Given a user query:
 {query}
