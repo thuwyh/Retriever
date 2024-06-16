@@ -10,13 +10,23 @@ and the conversation history between the user and system:
 {history}
 
 please rewrite the user query, so that the rewritten query contains all the context and key info to retrieve relative information.
-Example:
+Not all queries need to be rewritten. If the current has nothing to do with the chat history, just output the original query.
+
+Example 1:
 query: what is its population?
 history: 
 user: Where is the capital of China?
 bot: Beijing
 
 expected rewritten query: what is the population of Beijing
+
+Example 2:
+query: where is the capital of the USA?
+history: 
+user: Where is the capital of China?
+bot: Beijing
+
+expected rewritten query: where is the capital of the USA
 
 Reply only the rewritten query in the same language as original query.
 Your output:
