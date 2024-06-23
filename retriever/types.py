@@ -57,15 +57,15 @@ class RetrievedItem(BaseModel):
         else:
             doc = self.doc
         ret = {
-            "id": doc.id
+            "id": doc.id,
+            "rerank_score": self.rerank_score
         }
         if debug:
             ret.update(
                 {
                     "source": self.source.value,
                     "cosine_score": self.cosine_score,
-                    "bm25_score": self.bm25_score,
-                    "rerank_score": self.rerank_score
+                    "bm25_score": self.bm25_score
                 }
             )
         if with_payload:
