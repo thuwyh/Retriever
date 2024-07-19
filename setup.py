@@ -17,6 +17,7 @@ setup(
         "tqdm",
         "rank_bm25",
         "jieba",
-        "hnswlib"
+        "hnswlib",
+        "aiohttp"
     ],
 )

@@ -1,2 +1,11 @@
 rank_bm25
 sanic
+hnswlib
+openai
+requests
+aiohttp
+platformdirs
+pydantic
+jieba
+coloredlogs
+diskcache
