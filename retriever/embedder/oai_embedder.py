@@ -1,20 +1,14 @@
-from hashlib import md5
-import logging
 from typing import List
 from pathlib import Path
-import coloredlogs
 from diskcache import Cache
+from hashlib import md5
 import aiohttp
 import requests
 from platformdirs import user_cache_dir
 
 from retriever.embedder.base_embedder import BaseEmbedder
 
-logger = logging.getLogger("Retriever.TEIEmbedder")
-logger.setLevel(logging.INFO)
-coloredlogs.install(level=logging.INFO, logger=logger)
-
-class TEIEmbedder(BaseEmbedder):
+class OAIEmbedder(BaseEmbedder):
 
     def __init__(self, 
                  tei_addr:str, 
@@ -29,7 +23,7 @@ class TEIEmbedder(BaseEmbedder):
         self.normalize = normalize
 
         if cache_name is not None:
-            cachedir = user_cache_dir("Retriever.TEIEmbedder", "thuwyh")
+            cachedir = user_cache_dir("Retriever.OAIEmbedder", "thuwyh")
             cache_root = Path(cachedir) / cache_name
             self.cache = Cache(str(cache_root))
         else:
@@ -44,7 +38,6 @@ class TEIEmbedder(BaseEmbedder):
         key = md5(input_query.encode()).hexdigest()
         if self.cache is not None:
             if key in self.cache:
-                logger.info("hit cache!")
                 return self.cache[key]
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.tei_addr}/embed", json={'inputs':input_query, 'truncate':True}) as resp:
@@ -63,11 +56,10 @@ class TEIEmbedder(BaseEmbedder):
         key = md5(input_query.encode()).hexdigest()
         if self.cache is not None:
             if key in self.cache:
-                logger.info("hit cache!")
                 return self.cache[key]
         res = requests.post(f"{self.tei_addr}/embed", json={'inputs':input_query, 'truncate':True})
         if self.cache is not None:
-            self.cache[key] = res.json()[0]
+            self.cache[key] = res[0]
         return res.json()[0]
     
 if __name__ == '__main__':
